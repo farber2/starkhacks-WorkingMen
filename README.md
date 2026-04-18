@@ -78,6 +78,12 @@ The loop will:
 ## Run tests
 
 ```bash
+python -m pytest -q
+```
+
+If your virtual environment is activated, this also works:
+
+```bash
 pytest -q
 ```
 

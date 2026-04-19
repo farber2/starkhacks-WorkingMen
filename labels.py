@@ -1,0 +1,17 @@
+CLASS_NAMES = [
+    "bishop",
+    "black-bishop",
+    "black-king",
+    "black-knight",
+    "black-pawn",
+    "black-queen",
+    "black-rook",
+    "white-bishop",
+    "white-king",
+    "white-knight",
+    "white-pawn",
+    "white-queen",
+    "white-rook",
+]
+
+BOARD_CLASSES = ["board"]

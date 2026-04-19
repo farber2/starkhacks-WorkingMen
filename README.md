@@ -7,6 +7,8 @@ It currently handles:
 - legal move validation
 - Stockfish move selection
 - translation from UCI moves to robot-ready command objects
+- local beginner coaching via Ollama
+- optional local speech output via Piper
 
 It intentionally does **not** include:
 - motor control
@@ -23,6 +25,8 @@ chess_robot/
 ├── main.py
 ├── chess_logic/
 │   ├── __init__.py
+│   ├── coach.py
+│   ├── tts.py
 │   ├── game_manager.py
 │   ├── engine_wrapper.py
 │   ├── move_info.py
@@ -87,6 +91,125 @@ If your virtual environment is activated, this also works:
 pytest -q
 ```
 
+## Ollama + Piper tutor integration
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Start Ollama locally
+
+Run Ollama in a terminal:
+
+```bash
+ollama serve
+```
+
+Pull or warm up the default model used by the coach (`phi3`):
+
+```bash
+ollama run phi3
+```
+
+Your Ollama setup can use model storage on:
+- `/Volumes/Resto Chesto/ollama_models`
+
+If you need to set it in your shell:
+
+```bash
+export OLLAMA_MODELS="/Volumes/Resto Chesto/ollama_models"
+```
+
+Verify Ollama is reachable:
+
+```bash
+ollama list
+```
+
+### 3. Install Piper separately (local TTS)
+
+Piper is a local binary and must be installed separately from `pip` dependencies.
+On macOS, install it with Homebrew:
+
+```bash
+brew install piper
+```
+
+### 4. Add the Amy voice model files
+
+Place both files in this folder:
+
+```text
+voice/
+  en_US-amy-medium.onnx
+  en_US-amy-medium.onnx.json
+```
+
+The code expects this default path:
+- `voice/en_US-amy-medium.onnx`
+
+### 5. Run the demo with coaching + speech output
+
+```bash
+export CHESS_TTS=1
+python -m examples.demo_turn_loop
+```
+
+The demo keeps using your local chess engine for move generation, uses local Ollama for short beginner-friendly explanations, and can speak each explanation locally with Piper + Amy voice.
+
 ## Notes for Future Hardware Integration
 
 The output of `translate_move(...)` is a structured `RobotMoveCommand`, designed so a future hardware module can consume commands without changing chess logic.
+
+## Hackathon Web App (FastAPI + React)
+
+This repo now includes:
+- `backend/app.py` (FastAPI wrapper around your existing chess logic)
+- `frontend/` (React single-page UI with board, help panel, history, and status)
+
+### 1. Start backend API
+
+```bash
+source .venv/bin/activate
+uvicorn backend.app:app --reload --host 127.0.0.1 --port 8000
+```
+
+Available endpoints:
+- `GET /state`
+- `POST /move` with `{"uci":"e2e4"}`
+- `POST /help` with `{"speak": true|false}`
+- `POST /speak` with `{"text":"..."}`
+- `POST /reset`
+
+### 2. Start frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open:
+- `http://127.0.0.1:5173`
+
+Optional API override:
+
+```bash
+VITE_API_URL=http://127.0.0.1:8000 npm run dev
+```
+
+### 3. Piece image assets
+
+Drop a matching PNG set in:
+
+```text
+frontend/public/assets/pieces/
+```
+
+Expected names:
+- `wp.png`, `wn.png`, `wb.png`, `wr.png`, `wq.png`, `wk.png`
+- `bp.png`, `bn.png`, `bb.png`, `br.png`, `bq.png`, `bk.png`
+
+If image files are missing, the UI automatically falls back to unicode piece glyphs.

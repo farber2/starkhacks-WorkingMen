@@ -58,3 +58,18 @@ export function postGlassesAudio(payload = {}) {
     body: JSON.stringify(payload)
   });
 }
+
+export function processVision(payload = {}) {
+  return request('/vision/process', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getVisionState() {
+  return request('/vision/state');
+}
+
+export function resetVision() {
+  return request('/vision/reset', { method: 'POST' });
+}

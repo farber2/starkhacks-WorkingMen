@@ -4,3 +4,19 @@ __pycache__/
 .venv/
 .env
 .DS_Store
+*.log
+
+# Frontend artifacts
+frontend/node_modules/
+frontend/dist/
+
+# Python cache artifacts anywhere
+**/__pycache__/
+
+# Local IDE files
+.idea/
+.vscode/
+
+# Local vision/debug artifacts
+models/*.pt
+debug/

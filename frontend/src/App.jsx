@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Board from './components/Board';
 import {
   getHelp,
   getState,
   playMove,
   postGlassesAudio,
+  processVision,
   postVisionBoard,
   resetGame,
   speak
@@ -23,6 +24,66 @@ export default function App() {
   const [audioMessage, setAudioMessage] = useState(
     'Current route: local speaker (Piper). Future route: Meta glasses audio output.'
   );
+  const [visionStatus, setVisionStatus] = useState('Vision idle');
+  const [useBrowserCamera, setUseBrowserCamera] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState('Camera off');
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  function stopCamera() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraReady(false);
+    setCameraStatus('Camera off');
+  }
+
+  async function startCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraStatus('Browser camera API unavailable');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setCameraReady(true);
+      setCameraStatus('Camera ready');
+    } catch (err) {
+      setCameraReady(false);
+      setCameraStatus(`Camera failed: ${err.message || 'permission denied'}`);
+    }
+  }
+
+  function captureFrameBase64() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return null;
+    if (video.videoWidth <= 0 || video.videoHeight <= 0) return null;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.75);
+  }
 
   useEffect(() => {
     (async () => {
@@ -34,6 +95,55 @@ export default function App() {
       }
     })();
   }, []);
+
+  useEffect(() => () => stopCamera(), []);
+
+  useEffect(() => {
+    if (!useBrowserCamera) {
+      stopCamera();
+      return;
+    }
+    startCamera();
+  }, [useBrowserCamera]);
+
+  useEffect(() => {
+    let busy = false;
+    const id = setInterval(async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const image_b64 = useBrowserCamera ? captureFrameBase64() : null;
+        if (useBrowserCamera && !image_b64) {
+          setVisionStatus('Browser camera enabled, waiting for first frame...');
+          return;
+        }
+        const processed = await processVision({
+          image_b64: image_b64 || undefined,
+          source: useBrowserCamera ? 'browser_camera' : 'server_camera',
+          activity_threshold: 2.5,
+          confidence_threshold: 1.0,
+          min_streak: 1,
+          motion_squares_threshold: 14,
+          settle_frames: 1,
+          max_changed_squares_for_move: 12
+        });
+        const serverState = processed.state;
+        const label = processed.changed
+          ? `Move detected: ${processed.last_move_uci || 'unknown'}`
+          : `Watching board (${serverState?.turn || 'unknown'} to move)`;
+        setVisionStatus(label);
+        if (serverState) {
+          // Frontend board always comes from backend state snapshot.
+          setState(serverState);
+        }
+      } catch {
+        setVisionStatus('Vision state unavailable');
+      } finally {
+        busy = false;
+      }
+    }, 900);
+    return () => clearInterval(id);
+  }, [useBrowserCamera]);
 
   const history = state?.history ?? [];
   const coachText = state?.latest_coach_text ?? '';
@@ -97,6 +207,38 @@ export default function App() {
       setVisionMessage(result.message || 'Vision capture placeholder completed.');
     } catch (err) {
       setError(err.message || 'Capture failed.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleProcessVision() {
+    setLoading(true);
+    setError('');
+    try {
+      const image_b64 = useBrowserCamera ? captureFrameBase64() : null;
+      if (useBrowserCamera && !image_b64) {
+        setVisionStatus('Browser camera enabled, waiting for first frame...');
+        return;
+      }
+      const result = await processVision({
+        image_b64: image_b64 || undefined,
+        source: useBrowserCamera ? 'browser_camera' : 'server_camera',
+        activity_threshold: 2.5,
+        confidence_threshold: 1.0,
+        min_streak: 1,
+        motion_squares_threshold: 14,
+        settle_frames: 1,
+        max_changed_squares_for_move: 12
+      });
+      const moveText = result.last_move_uci ? `last: ${result.last_move_uci}` : 'no move yet';
+      setVisionStatus(`Vision processed (${moveText}, score ${result.move_score ?? 'n/a'})`);
+      if (result.changed) {
+        const snapshot = await getState();
+        setState(snapshot);
+      }
+    } catch (err) {
+      setError(err.message || 'Vision process failed.');
     } finally {
       setLoading(false);
     }
@@ -188,6 +330,35 @@ export default function App() {
             <button onClick={handleRouteAudio} disabled={loading}>
               Test Audio Route
             </button>
+            <button onClick={handleProcessVision} disabled={loading}>
+              Process Vision
+            </button>
+          </div>
+
+          <div className="camera-controls">
+            <label className="glasses-toggle">
+              <input
+                type="checkbox"
+                checked={useBrowserCamera}
+                onChange={(e) => setUseBrowserCamera(e.target.checked)}
+              />
+              Use Browser Camera for Vision
+            </label>
+            <span className="camera-status">{cameraStatus}</span>
+          </div>
+
+          <div className="camera-preview-shell">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`camera-preview ${cameraReady ? 'on' : 'off'}`}
+            />
+            {!cameraReady ? (
+              <div className="camera-placeholder">Camera preview appears here</div>
+            ) : null}
+            <canvas ref={canvasRef} className="hidden-canvas" />
           </div>
 
           {metaGlassesMode ? (
@@ -196,6 +367,10 @@ export default function App() {
               spoken coaching.
             </div>
           ) : null}
+
+          <div className="meta-mode-note">
+            {visionStatus}
+          </div>
 
           <div className="tts-row">
             <label>

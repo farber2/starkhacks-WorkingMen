@@ -178,9 +178,59 @@ body {
 .glasses-controls {
   width: 100%;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 8px;
   align-items: center;
+}
+
+.camera-controls {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.camera-status {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.camera-preview-shell {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #111820;
+  min-height: 200px;
+  position: relative;
+  overflow: hidden;
+}
+
+.camera-preview {
+  width: 100%;
+  display: block;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.camera-preview.off {
+  opacity: 0;
+  height: 0;
+}
+
+.camera-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.hidden-canvas {
+  display: none;
 }
 
 .glasses-toggle {
@@ -331,6 +381,11 @@ button:disabled {
   .controls,
   .glasses-controls {
     grid-template-columns: 1fr;
+  }
+
+  .camera-controls {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .glasses-toggle {
